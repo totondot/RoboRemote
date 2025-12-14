@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "656130758590",
+    "project_id": "roboremote-2b010",
+    "storage_bucket": "roboremote-2b010.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:656130758590:android:d2784b20df6ca2258f0bef",
+        "android_client_info": {
+          "package_name": "com.example.roboremote"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDEcfn3Qj7HOi9u1TgHXfcdajBVAgqxbsM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
