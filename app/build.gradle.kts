@@ -7,7 +7,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("com.google.gms.google-services")
     alias(libs.plugins.compose.compiler)
-
+    id("com.google.devtools.ksp") version "2.0.20-1.0.24"
 }
 
 
@@ -73,5 +73,10 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:32.3.1"))
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("androidx.compose.material:material-icons-extended:1.6.8") // Check for the latest version
+    val room_version = "2.6.1"
 
+    implementation("androidx.room:room-runtime:$room_version")
+    implementation("androidx.room:room-ktx:$room_version") // Helper for Kotlin
+    ksp("androidx.room:room-compiler:$room_version")      // The compiler
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.2")
 }
