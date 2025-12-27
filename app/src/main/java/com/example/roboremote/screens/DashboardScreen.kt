@@ -4,9 +4,14 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,26 +20,50 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.roboremote.bluetooth.BleConnectionManager
+import com.example.roboremote.utils.ButtonStorage
+import com.example.roboremote.utils.CustomButton
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
-    macAddress: String, // NEW: We now know WHICH robot
+    macAddress: String,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
 
-    // Create the Connection Manager
+    // Connection Manager
     val connectionManager = remember { BleConnectionManager(context) }
     val connectionState by connectionManager.connectionState.collectAsState()
 
-    // Connect when screen opens, Disconnect when it closes
-    DisposableEffect(Unit) {
+    // Custom Buttons State
+    // We utilize mutableStateListOf so the UI updates immediately when we add one
+    val customButtons = remember { mutableStateListOf<CustomButton>() }
+    var showAddDialog by remember { mutableStateOf(false) }
+
+    // Load buttons when screen starts
+    LaunchedEffect(macAddress) {
+        val saved = ButtonStorage.loadButtons(context, macAddress)
+        customButtons.addAll(saved)
+
+        // Connect to robot
         connectionManager.connect(macAddress)
+    }
+
+    // Save buttons whenever the list changes
+    fun saveNewButton(name: String, cmd: String) {
+        val newBtn = CustomButton(name, cmd)
+        customButtons.add(newBtn)
+        ButtonStorage.saveButtons(context, macAddress, customButtons)
+    }
+
+    // Cleanup on exit
+    DisposableEffect(Unit) {
         onDispose { connectionManager.disconnect() }
     }
 
@@ -44,34 +73,126 @@ fun DashboardScreen(
                 title = {
                     Column {
                         Text("Controller")
-                        Text(connectionState, style = MaterialTheme.typography.bodySmall) // Show Status
+                        Text(connectionState, style = MaterialTheme.typography.bodySmall)
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                     }
+                },
+                actions = {
+                    // The "Add Button" icon in the top right
+                    IconButton(onClick = { showAddDialog = true }) {
+                        Icon(Icons.Default.Add, contentDescription = "Add Custom Button")
+                    }
                 }
             )
         }
     ) { padding ->
         Column(
-            modifier = Modifier.padding(padding).fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // JOYSTICK LOGIC
-            Joystick(
-                onMoved = { x, y ->
-                    // SEND DATA TO ROBOT!
-                    // Format: "X:50,Y:-20\n"
-                    val command = "X:${x.toInt()},Y:${y.toInt()}\n"
-                    connectionManager.sendData(command)
+            // 1. THE JOYSTICK (Top Half)
+            Box(
+                modifier = Modifier
+                    .weight(1f) // Takes up top space
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Joystick(
+                    onMoved = { x, y ->
+                        val command = "X:${x.toInt()},Y:${y.toInt()}\n"
+                        connectionManager.sendData(command)
+                    }
+                )
+            }
+
+            Divider(modifier = Modifier.padding(vertical = 16.dp))
+
+            // 2. THE CUSTOM BUTTON PAD (Bottom Half)
+            Text("Custom Actions", fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
+
+            if (customButtons.isEmpty()) {
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Text("Tap + to add buttons", color = Color.Gray)
                 }
-            )
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(3), // 3 buttons per row
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(customButtons) { btn ->
+                        Button(
+                            onClick = {
+                                // Send the custom command!
+                                connectionManager.sendData("${btn.command}\n")
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                        ) {
+                            Text(btn.name, fontSize = 12.sp, maxLines = 1)
+                        }
+                    }
+                }
+            }
         }
     }
+
+    // 3. THE POPUP DIALOG TO ADD BUTTONS
+    if (showAddDialog) {
+        AddButtonDialog(
+            onDismiss = { showAddDialog = false },
+            onAdd = { name, cmd ->
+                saveNewButton(name, cmd)
+                showAddDialog = false
+            }
+        )
+    }
 }
+
+@Composable
+fun AddButtonDialog(onDismiss: () -> Unit, onAdd: (String, String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var command by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("New Button") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Button Label (e.g. 'Jump')") }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = command,
+                    onValueChange = { command = it },
+                    label = { Text("Command (e.g. 'CMD_JUMP')") },
+                    supportingText = { Text("This string is sent to the robot.") }
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { if (name.isNotEmpty() && command.isNotEmpty()) onAdd(name, command) }) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+// Re-pasting Joystick here to ensure it doesn't get lost
 @Composable
 fun Joystick(onMoved: (Float, Float) -> Unit) {
     var position by remember { mutableStateOf(Offset.Zero) }
@@ -80,15 +201,11 @@ fun Joystick(onMoved: (Float, Float) -> Unit) {
 
     Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .size((maxRadius * 2).dp) // Size of the outer circle
+        modifier = Modifier.size((maxRadius * 2).dp)
     ) {
-        // Outer Circle (Background)
         Canvas(modifier = Modifier.matchParentSize()) {
             drawCircle(color = Color.LightGray.copy(alpha = 0.5f))
         }
-
-        // The Inner Knob (Draggable)
         Box(
             modifier = Modifier
                 .offset { IntOffset(position.x.roundToInt(), position.y.roundToInt()) }
@@ -97,27 +214,16 @@ fun Joystick(onMoved: (Float, Float) -> Unit) {
                 .pointerInput(Unit) {
                     detectDragGestures(
                         onDragEnd = {
-                            // Reset to center when let go
                             position = Offset.Zero
                             onMoved(0f, 0f)
                         }
                     ) { change, dragAmount ->
                         change.consume()
-
-                        // Calculate new position
                         val newPos = position + dragAmount
                         val distance = newPos.getDistance()
-
-                        // Constrain knob inside the circle
-                        position = if (distance > maxRadius) {
-                            newPos * (maxRadius / distance)
-                        } else {
-                            newPos
-                        }
-
-                        // Send normalized values (-100 to 100)
+                        position = if (distance > maxRadius) newPos * (maxRadius / distance) else newPos
                         val xPercent = (position.x / maxRadius) * 100
-                        val yPercent = -(position.y / maxRadius) * 100 // Invert Y so Up is Positive
+                        val yPercent = -(position.y / maxRadius) * 100
                         onMoved(xPercent, yPercent)
                     }
                 }

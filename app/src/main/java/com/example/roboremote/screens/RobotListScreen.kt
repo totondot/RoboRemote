@@ -144,9 +144,7 @@ fun AddRobotDialog(
         }
     )
 }
-// ... (Your existing RobotListScreen and AddRobotDialog code is above here) ...
 
-// PASTE THIS AT THE VERY BOTTOM OF THE FILE
 @Composable
 fun RobotItem(robot: RobotProfile, onClick: () -> Unit, onDelete: () -> Unit) {
     Card(

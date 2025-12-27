@@ -61,7 +61,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                 .height(50.dp),
             shape = RoundedCornerShape(8.dp)
         ) {
-            Text(text = "Login (Demo Mode)")
+            Text(text = "Login")
         }
     }
 }
